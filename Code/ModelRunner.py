@@ -4,11 +4,8 @@ from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
 
-# TODO: Implement Early Stopping to better tune the parameters. Have defined some variables for that.
-
 class MR():
     def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, trainbase, valbase, testbase, tp):
-        # For Xe
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize)
         self.val_ec_dl = DataLoader(val_dset, shuffle=True, batch_size=batchsize)
         self.test_ec_dl = DataLoader(test_dset, shuffle=True, batch_size=batchsize)
@@ -21,12 +18,16 @@ class MR():
         self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
         self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range', verbose=True)
         self.criterion = torch.nn.MSELoss()
-        
+
+        # Set the baselines
         self.trainbase = trainbase
         self.valbase = valbase
         self.testbase = testbase
-        
+
+        # Set the training parameter. Xe or Te
         self.tp = tp
+
+        # For Early Stopping
         self.modelparams = None
 
     def train_and_validate(self):
@@ -67,7 +68,7 @@ class MR():
                 train_running_loss += loss.item()
                 train_base_loss += base_loss.item()
 
-            self.sch.step()
+            self.sch.step()                                           # Update the learning rate
             self.model.eval()
             for v, (m1, m2, xe, Te) in enumerate(self.val_ec_dl):
                 if self.tp == "xe":
@@ -81,15 +82,14 @@ class MR():
                 base = torch.full((len(truth), ), self.valbase)
                 val_base_loss += self.criterion(base, truth).item()
                 
-                # if val_running_loss <= lowest_loss:
-                #     self.modelparams = torch.nn.ParameterList(self.model.parameters())
-                #     lowest_loss = val_running_loss
-                #
-                # if val_running_loss > lowest_loss:
-                #     self.model.parameters() = self.modelparams
+            # Early Stopping. If the loss goes up or stays the same, revert the parameters back to previous stage
+            if val_running_loss < lowest_loss:
+                self.modelparams = self.model.state_dict()
+                lowest_loss = val_running_loss
+            else:
+                print("Early Stopping. Resetting Weights.")
+                self.model.load_state_dict(self.modelparams)
                     
-
-
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
                 np.round(train_running_loss, 3), 
@@ -134,8 +134,8 @@ class MR():
                 else:
                     truth = Te
 
-                outputs = self.model(m1.float(), m2.float(), self.tp)
-                invouts = self.model(m2.float(), m1.float(), self.tp)
+                outputs = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
+                invouts = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
 
                 test_loss += self.criterion(outputs[:, 0], truth).item()
 
@@ -169,13 +169,14 @@ class MR():
             plt.show()
 
         # fig.savefig('D:\\Research\\UConn_ML\\Images\\snn_results_plots.png')
-        
-        # should all be 1 or close to 1 to show that f(A,B) = 1 - f(B,A)
+
+        # Print the values from the last batch processed just for the user to see
         print("f(A,B): \n", outputs.flatten())
         print("\n")
         print("f(B,A): \n", invouts.flatten())
         print("\n")
         l = min(len(outputs), len(invouts))
+        # should all be 1 or close to 1 to show that f(A,B) = 1 - f(B,A)
         print("f(A,B) + f(B,A): \n", outputs[0:l].flatten() + invouts[0:l].flatten())
         print("\n")
         print("Original Values: \n", truth)

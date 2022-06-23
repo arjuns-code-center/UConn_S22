@@ -1,5 +1,5 @@
 import torch
-from torch.nn import Module, Linear, Sequential, Sigmoid
+from torch.nn import Module, Linear, Sequential
 
 # SNN class with model
 class SNN(Module):
@@ -14,7 +14,6 @@ class SNN(Module):
         self.output = Sequential(
             Linear(in_features=6, out_features=6, bias=False), # distance metric calculation stage
             Linear(in_features=6, out_features=1, bias=False), # final stage where prediction is made
-            Sigmoid()
         )
 
     def forward(self, x1, x2, marker="xe"):
@@ -31,12 +30,12 @@ class SNN(Module):
         with torch.no_grad():
             self.output[0].weight[:, 3:6] = -1 * self.output[0].weight[:, 0:3]
         
-        p = self.output(y)                # output for xe   (batchsize, 1)
+        p = torch.sigmoid(self.output(y)) # output for xe (batchsize, 1)
         return p
     
     def te(self, x1, x2):
-        y1 = self.model(x1)
-        y2 = self.model(x2)   
-        d = torch.abs(y1 - y2)           # difference for Te
-        p = self.fc(d)                   # output for Te
+        y1 = self.model(x1)               # (batchsize, 3)
+        y2 = self.model(x2)               # (batchsize, 3)
+        y = torch.cat([y1, y2], 1)        # (batchsize, 6)
+        p = self.output(y)                # (batchsize, 1)
         return p

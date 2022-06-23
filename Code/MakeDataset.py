@@ -10,7 +10,7 @@ class MD(Dataset):
 
     def __len__(self):
         return len(self.ecdf)
-  
+
     def __getitem__(self, idx):
         ec = self.ecdf.iloc[idx]
         
