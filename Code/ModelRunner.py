@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
 
+# TODO: Try out different configurations of the callback. Save only some stuff and use them in combination.
+
 class MR():
     def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, trainbase, valbase, testbase, tp):
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize)
@@ -26,9 +28,9 @@ class MR():
 
         # Set the training parameter. Xe or Te
         self.tp = tp
-
-        # For Early Stopping
-        self.modelparams = None
+        
+        # For callback
+        self.patience = 0
 
     def train_and_validate(self):
         trloss = np.array([])
@@ -82,13 +84,25 @@ class MR():
                 base = torch.full((len(truth), ), self.valbase)
                 val_base_loss += self.criterion(base, truth).item()
                 
-            # Early Stopping. If the loss goes up or stays the same, revert the parameters back to previous stage
-            if val_running_loss < lowest_loss:
-                self.modelparams = self.model.state_dict()
-                lowest_loss = val_running_loss
+            # Callback. If the loss goes up, revert the parameters back to previous stage. Added patience to stop infinite computation. 
+            if val_running_loss <= lowest_loss:
+                torch.save({
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.opt.state_dict(),
+                    'train_loss': train_running_loss,
+                    'val_loss': val_running_loss}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                self.patience = 0
             else:
-                print("Early Stopping. Resetting Weights.")
-                self.model.load_state_dict(self.modelparams)
+                if self.patience < 1:
+                    checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
+                    train_running_loss = checkpoint['train_loss']
+                    val_running_loss = checkpoint['val_loss']
+                    
+                self.patience = self.patience + 1
+            
+            lowest_loss = val_running_loss
                     
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
@@ -96,7 +110,7 @@ class MR():
                 np.round(train_base_loss, 3), 
                 np.round(val_running_loss, 3), 
                 np.round(val_base_loss, 3)))
-
+            
             trloss = np.append(trloss, train_running_loss)
             trbase = np.append(trbase, train_base_loss)
             vloss = np.append(vloss, val_running_loss)
