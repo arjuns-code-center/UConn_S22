@@ -4,8 +4,6 @@ from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
 
-# TODO: Try out different configurations of the callback. Save only some stuff and use them in combination.
-
 class MR():
     def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, trainbase, valbase, testbase, tp):
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize)
@@ -14,11 +12,11 @@ class MR():
 
         # Set the model and training parameters
         self.model = SNN.SNN(starting_features)
-        self.num_epochs = epochs
+        self.max_epochs = epochs
 
         # Set optimizer and loss function. Using MSE for regression. Have lr_scheduler for adaptive learning 
         self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range', verbose=True)
+        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range')
         self.criterion = torch.nn.MSELoss()
 
         # Set the baselines
@@ -39,8 +37,9 @@ class MR():
         vbase = np.array([])
         
         lowest_loss = 100
+        lowest_loss_epoch = 1
         
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.max_epochs):
             self.model.train()
             train_running_loss = 0.0
             train_base_loss = 0.0
@@ -54,14 +53,14 @@ class MR():
                 if self.tp == "xe":
                     truth = xe/100.0
                 else:
-                    truth = Te
+                    truth = Te.float()
 
                 # pass 2 sets of inputs into the snn and get p, the output
                 output = self.model(m1.float(), m2.float(), self.tp)
 
                 loss = self.criterion(output[:, 0], truth)
 
-                base = torch.full((len(truth),), self.trainbase)     # create same value array
+                base = torch.full((len(truth),), self.trainbase)   # create same value array
                 base_loss = self.criterion(base, truth)            # obtain baseline loss
 
                 loss.backward()
@@ -70,7 +69,8 @@ class MR():
                 train_running_loss += loss.item()
                 train_base_loss += base_loss.item()
 
-            self.sch.step()                                           # Update the learning rate
+            self.sch.step()                                    # update the learning rate
+            
             self.model.eval()
             for v, (m1, m2, xe, Te) in enumerate(self.val_ec_dl):
                 if self.tp == "xe":
@@ -83,27 +83,7 @@ class MR():
 
                 base = torch.full((len(truth), ), self.valbase)
                 val_base_loss += self.criterion(base, truth).item()
-                
-            # Callback. If the loss goes up, revert the parameters back to previous stage. Added patience to stop infinite computation. 
-            if val_running_loss <= lowest_loss:
-                torch.save({
-                    'model_state_dict': self.model.state_dict(),
-                    'optimizer_state_dict': self.opt.state_dict(),
-                    'train_loss': train_running_loss,
-                    'val_loss': val_running_loss}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
-                self.patience = 0
-            else:
-                if self.patience < 1:
-                    checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
-                    self.model.load_state_dict(checkpoint['model_state_dict'])
-                    self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
-                    train_running_loss = checkpoint['train_loss']
-                    val_running_loss = checkpoint['val_loss']
-                    
-                self.patience = self.patience + 1
-            
-            lowest_loss = val_running_loss
-                    
+
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
                 np.round(train_running_loss, 3), 
@@ -111,12 +91,37 @@ class MR():
                 np.round(val_running_loss, 3), 
                 np.round(val_base_loss, 3)))
             
+            # Callback. If the loss goes up, revert the parameters back to previous epoch. Added patience to stop infinite computation. 
+            if val_running_loss <= lowest_loss:
+                lowest_loss = val_running_loss
+                lowest_loss_epoch = epoch+1
+                
+                torch.save({
+                    'model_state_dict': self.model.state_dict(),
+                    'optimizer_state_dict': self.opt.state_dict()}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                
+                self.patience = 0
+            else:
+                if self.patience <= 1:
+                    print("Callback to epoch {} | Patience {}/2".format(lowest_loss_epoch, self.patience+1))
+                    
+                    checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
+                    
+                    self.patience = self.patience + 1
+                
+            # Early stopping. If the train loss goes below a certain value, then we can stop training, preventing overfitting. 
+            if train_running_loss <= 17.5:
+                print("Early Stop")
+                break
+            
             trloss = np.append(trloss, train_running_loss)
             trbase = np.append(trbase, train_base_loss)
             vloss = np.append(vloss, val_running_loss)
             vbase = np.append(vbase, val_base_loss)
 
-        x = np.arange(self.num_epochs)
+        x = np.arange(epoch)
         plt.figure(1)
         plt.plot(x, trloss, label="Train Running Loss", c="blue")
         plt.plot(x, trbase, label="Train Baseline Loss", c="red")
