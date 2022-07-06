@@ -3,13 +3,14 @@ import torch
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
+import MakeDataset as MD
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, trainbase, valbase, testbase, tp):
+    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_var, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize)
-        self.val_ec_dl = DataLoader(val_dset, shuffle=True, batch_size=batchsize)
-        self.test_ec_dl = DataLoader(test_dset, shuffle=True, batch_size=batchsize)
-
+        self.val_dset = val_dset
+        self.test_dset = test_dset
+        
         # Set the model and training parameters
         self.model = SNN.SNN(starting_features)
         self.max_epochs = epochs
@@ -19,10 +20,26 @@ class MR():
         self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range')
         self.criterion = torch.nn.MSELoss()
 
-        # Set the baselines
-        self.trainbase = trainbase
-        self.valbase = valbase
-        self.testbase = testbase
+        # Set the baseline calculation parameter, and calculate the baselines
+        self.var = train_var
+        self.trainbase = 0
+        self.valbase = 0
+        self.testbase = 0
+        
+        if tp == "xe":
+            for i in train_dset.xe:
+                self.trainbase += self.criterion(self.var, i/100.0).item() / len(train_dset)
+            for i in val_dset.xe:
+                self.valbase = self.criterion(self.var, i/100.0).item() / len(val_dset)
+            for i in test_dset.xe:
+                self.testbase = self.criterion(self.var, i/100.0).item() / len(test_dset)
+        else:
+            for i in train_dset.Te:
+                self.trainbase += self.criterion(self.var, i.float()).item() / len(train_dset)
+            for i in val_dset.Te:
+                self.valbase = self.criterion(self.var, i.float()).item() / len(val_dset)
+            for i in test_dset.Te:
+                self.testbase = self.criterion(self.var, i.float()).item() / len(test_dset)
 
         # Set the training parameter. Xe or Te
         self.tp = tp
@@ -42,10 +59,8 @@ class MR():
         for epoch in range(self.max_epochs):
             self.model.train()
             train_running_loss = 0.0
-            train_base_loss = 0.0
             val_running_loss = 0.0
-            val_base_loss = 0.0
-
+            
             # training step: iterate through the batch and obtain the 4 data
             for x, (m1, m2, xe, Te) in enumerate(self.train_ec_dl):   
                 self.opt.zero_grad()
@@ -60,36 +75,33 @@ class MR():
 
                 loss = self.criterion(output[:, 0], truth)
 
-                base = torch.full((len(truth),), self.trainbase)   # create same value array
-                base_loss = self.criterion(base, truth)            # obtain baseline loss
-
                 loss.backward()
                 self.opt.step()
 
                 train_running_loss += loss.item()
-                train_base_loss += base_loss.item()
 
             self.sch.step()                                    # update the learning rate
             
             self.model.eval()
-            for v, (m1, m2, xe, Te) in enumerate(self.val_ec_dl):
+            for i in range(len(self.val_dset)):
+                line = self.val_dset[i]
+
+                m1 = line[0]
+                m2 = line[1]
                 if self.tp == "xe":
-                    truth = xe/100.0
+                    truth = line[2]/100.0
                 else:
-                    truth = Te
+                    truth = line[3].float()
 
                 output = self.model(m1.float(), m2.float(), self.tp)
-                val_running_loss += self.criterion(output[:, 0], truth).item()
-
-                base = torch.full((len(truth), ), self.valbase)
-                val_base_loss += self.criterion(base, truth).item()
+                val_running_loss += self.criterion(output[:, 0], truth).item() / len(val_dset)
 
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
-                np.round(train_running_loss, 3), 
-                np.round(train_base_loss, 3), 
+                np.round(train_running_loss / x, 3), 
+                np.round(self.trainbase, 3), 
                 np.round(val_running_loss, 3), 
-                np.round(val_base_loss, 3)))
+                np.round(self.valbase, 3)))
             
             # Callback. If the loss goes up, revert the parameters back to previous epoch. Added patience to stop infinite computation. 
             if val_running_loss <= lowest_loss:
@@ -121,7 +133,11 @@ class MR():
             vloss = np.append(vloss, val_running_loss)
             vbase = np.append(vbase, val_base_loss)
 
-        x = np.arange(epoch)
+        try:
+            x = np.arange(epoch)
+        except ValueError:
+            x = np.arange(self.max_epochs)
+            
         plt.figure(1)
         plt.plot(x, trloss, label="Train Running Loss", c="blue")
         plt.plot(x, trbase, label="Train Baseline Loss", c="red")
@@ -138,7 +154,6 @@ class MR():
 
     def test_plot_stats(self):
         test_loss = 0.0
-        test_baseline = 0.0
         self.model.eval()
 
         fig, axes = plt.subplots(8, 2)
@@ -147,21 +162,22 @@ class MR():
         row = 0
 
         with torch.no_grad():
-            for y, (m1, m2, xe, Te) in enumerate(self.test_ec_dl):
+            for i in range(10):
+                line = self.test_dset[i]
+                m1 = line[0]
+                m2 = line[1]
+                
                 if self.tp == "xe":
-                    truth = xe/100.0
+                    truth = line[2]/100.0
                 else:
-                    truth = Te
+                    truth = line[3].float()
 
                 outputs = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
                 invouts = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
 
-                test_loss += self.criterion(outputs[:, 0], truth).item()
+                test_loss += self.criterion(outputs, truth).item() / len(test_dset)
 
-                base = torch.full((len(truth),), self.testbase)
-                test_baseline += self.criterion(base, truth).item()
-
-                x = np.arange(len(xe))
+                x = np.arange(10)
 
                 axes[row, 0].scatter(x, outputs.detach().numpy() - truth[np.newaxis].numpy().T, c="red")
                 axes[row, 0].plot(x, np.zeros((len(truth.numpy()),)), c="green", label="0 Point")
@@ -181,7 +197,7 @@ class MR():
 
             print('Test Loss: {} | Test Baseline: {}\n'.format(
                 np.round(test_loss, 3), 
-                np.round(test_baseline, 3)))
+                np.round(self.testbase, 3)))
 
             axes[0, 0].set_title("Residual plots of predicted and actual eutectic proportion Xe")
             axes[0, 1].set_title("Scatter plots of predicted vs actual eutectic proportion Xe")
