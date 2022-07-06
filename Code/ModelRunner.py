@@ -3,7 +3,6 @@ import torch
 from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
-import MakeDataset as MD
 
 class MR():
     def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_var, tp):        
@@ -94,7 +93,7 @@ class MR():
                     truth = line[3].float()
 
                 output = self.model(m1.float(), m2.float(), self.tp)
-                val_running_loss += self.criterion(output[:, 0], truth).item() / len(val_dset)
+                val_running_loss += self.criterion(output[:, 0], truth).item() / len(self.val_dset)
 
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
@@ -175,7 +174,7 @@ class MR():
                 outputs = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
                 invouts = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
 
-                test_loss += self.criterion(outputs, truth).item() / len(test_dset)
+                test_loss += self.criterion(outputs, truth).item() / len(self.test_dset)
 
                 x = np.arange(10)
 
