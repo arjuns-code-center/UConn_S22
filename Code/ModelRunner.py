@@ -126,9 +126,9 @@ class MR():
                     self.patience = self.patience + 1
                 
             # Early stopping. If the train loss goes below a certain value, then we can stop training, preventing overfitting. 
-#             if train_running_loss <= 0.08:
-#                 print("Early Stop")
-#                 break
+            if train_running_loss <= 0.065:
+                print("Early Stop")
+                break
             
             trloss = np.append(trloss, train_running_loss)
             trbase = np.append(trbase, self.trainbase)
@@ -191,7 +191,7 @@ class MR():
         for row in range(numplots):
             axes[row, 0].scatter(x, outputs[pred*l:succ*l] - truths[pred*l:succ*l], c="red")
             axes[row, 0].plot(x, np.zeros((l,)), c="green", label="0 Point")
-            axes[row, 0].set(xlabel="Batch Data Points", ylabel="Residuals")
+            axes[row, 0].set(xlabel="Data Points", ylabel="Residuals")
             axes[row, 0].legend(loc="upper right")
 
             axes[row, 1].scatter(truths[pred*l:succ*l], outputs[pred*l:succ*l], c="green")
