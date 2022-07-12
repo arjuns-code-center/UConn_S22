@@ -1,8 +1,6 @@
 import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-from matplotlib import pyplot as plt
 import SiameseNeuralNetwork as SNN
 
 class MR():
@@ -44,11 +42,11 @@ class MR():
 
         # Set the training parameter. Xe or Te
         self.tp = tp
-        
-        # For callback
-        self.patience = 0
 
     def train_and_validate(self):
+        tolerance = 0                                # for early stopping
+        patience = 0                                 # for callbacks
+        
         trloss = np.array([])
         trbase = np.array([])
         vloss = np.array([])
@@ -114,20 +112,30 @@ class MR():
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.opt.state_dict()}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
                 
-                self.patience = 0
+                patience = 0
             else:
-                if self.patience <= 1:
-                    print("Callback to epoch {} | Patience {}/2".format(lowest_loss_epoch, self.patience+1))
+                if patience <= 3:
+                    print("Callback to epoch {} | Patience {}/4".format(lowest_loss_epoch, patience+1))
                     
                     checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
                     self.model.load_state_dict(checkpoint['model_state_dict'])
                     self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
                     
-                    self.patience = self.patience + 1
+                    patience = patience + 1
                 
-            # Early stopping. If the train loss goes below a certain value, then we can stop training, preventing overfitting. 
-            if train_running_loss <= 0.065:
-                print("Early Stop")
+            # Early stopping. If the loss difference is over some min delta tolerance times, stop as it is not getting better
+            # Also stop is train running loss is getting too small and breaks a threshold set
+            # Also if the validation loss is over the baseline by a lot, model won't learn anything as we are stuck in a local minima
+            if (val_running_loss - train_running_loss) > 0.01:
+                tolerance = tolerance + 1
+                if tolerance == 5:
+                    print("Early Stop. Loss difference over threshold")
+                    break
+            if train_running_loss <= 0.1:
+                print("Early Stop. Train Loss under threshold.")
+                break
+            if (val_running_loss - self.valbase) > 0.025:
+                print("Early Stop. Validation Loss over baseline.")
                 break
             
             trloss = np.append(trloss, train_running_loss)
@@ -135,21 +143,7 @@ class MR():
             vloss = np.append(vloss, val_running_loss)
             vbase = np.append(vbase, self.valbase)
             
-        x = np.arange(epoch)
-            
-        plt.figure(1)
-        plt.plot(x, trloss[0:epoch], label="Train Running Loss", c="blue")
-        plt.plot(x, trbase[0:epoch], label="Train Baseline Loss", c="red")
-        plt.title("Graph of Training Loss Against a Baseline")
-        plt.legend(loc="upper right")
-        plt.show()
-
-        plt.figure(2)
-        plt.plot(x, vloss[0:epoch], label="Val Running Loss", c="blue")
-        plt.plot(x, vbase[0:epoch], label="Val Baseline Loss", c="red")
-        plt.title("Graph of Validation Loss Against a Baseline")
-        plt.legend(loc="upper right")
-        plt.show()
+        return trloss, trbase, vloss, vbase
 
     def test_plot_stats(self):
         outputs = np.array([]).astype(float)
@@ -158,11 +152,6 @@ class MR():
         
         test_loss = 0.0
         self.model.eval()
-
-        numplots = 5
-        fig, axes = plt.subplots(numplots, 2)
-        fig.set_figheight(40)
-        fig.set_figwidth(15)
 
         with torch.no_grad():
             for line in self.test_dset:
@@ -183,45 +172,8 @@ class MR():
 
                 test_loss += self.criterion(output, truth).item() / len(self.test_dset)
 
-        l = 25
-        pred = 0
-        succ = 1
-        x = np.arange(l)
-        
-        for row in range(numplots):
-            axes[row, 0].scatter(x, outputs[pred*l:succ*l] - truths[pred*l:succ*l], c="red")
-            axes[row, 0].plot(x, np.zeros((l,)), c="green", label="0 Point")
-            axes[row, 0].set(xlabel="Data Points", ylabel="Residuals")
-            axes[row, 0].legend(loc="upper right")
-
-            axes[row, 1].scatter(truths[pred*l:succ*l], outputs[pred*l:succ*l], c="green")
-            axes[row, 1].plot(truths[pred*l:succ*l], truths[pred*l:succ*l], label="Accuracy Line")
-            axes[row, 1].set(xlabel="Actual Xe", ylabel="Predicted Xe")
-            axes[row, 1].legend(loc="upper right")
-
-            plt.ylim([0, 1])
-            
-            pred += 1
-            succ += 1
-
         print('Test Loss: {} | Test Baseline: {}\n'.format(
             np.round(test_loss, 3), 
             np.round(self.testbase, 3)))
 
-        axes[0, 0].set_title("Residual plots of predicted and actual eutectic proportion Xe")
-        axes[0, 1].set_title("Scatter plots of predicted vs actual eutectic proportion Xe")
-        plt.show()
-
-        # fig.savefig('D:\\Research\\UConn_ML\\Images\\snn_results_plots.png')
-
-        # Print the values from the last batch processed just for the user to see
-        disp = pd.DataFrame({
-            'f(A,B)': np.round(outputs[0:l], 3),
-            'f(B,A)': np.round(invouts[0:l], 3),
-            'f(A,B) + f(B,A)': outputs[0:l] + invouts[0:l],
-            'Truth': np.round(truths[0:l], 3),
-            'Pred': np.round(outputs[0:l], 3)})
-        
-        disp.style.set_properties(**{'text-align': 'center'})
-        
-        print(disp)
+        return outputs, invouts, truths
