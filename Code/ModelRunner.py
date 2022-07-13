@@ -124,18 +124,18 @@ class MR():
                     patience = patience + 1
                 
             # Early stopping. If the loss difference is over some min delta tolerance times, stop as it is not getting better
-            # Also stop is train running loss is getting too small and breaks a threshold set
+            # Also stop is validation running loss is getting too small and breaks a threshold set
             # Also if the validation loss is over the baseline by a lot, model won't learn anything as we are stuck in a local minima
             if (val_running_loss - train_running_loss) > 0.01:
                 tolerance = tolerance + 1
                 if tolerance == 5:
-                    print("Early Stop. Loss difference over threshold")
+                    print("Early Stop. Loss difference over threshold.")
                     break
-            if train_running_loss <= 0.1:
-                print("Early Stop. Train Loss under threshold.")
+            if val_running_loss <= 0.1:
+                print("Early Stop. Validation Loss under overfitting threshold.")
                 break
             if (val_running_loss - self.valbase) > 0.025:
-                print("Early Stop. Validation Loss over baseline.")
+                print("Early Stop. Validation Loss over baseline threshold.")
                 break
             
             trloss = np.append(trloss, train_running_loss)
