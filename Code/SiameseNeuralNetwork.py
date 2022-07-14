@@ -52,13 +52,13 @@ class SNN(Module):
             self.dB.weight[:, 1] = -1 * self.dB.weight[:, 0]
             self.dC.weight[:, 1] = -1 * self.dC.weight[:, 0]
         
-        zA = self.dA(yA)                                        # (batchsize, 1)
+        zA = self.dA(yA)                                              # (batchsize, 1)
         zB = self.dB(yB)
         zC = self.dC(yC)
         
-        z = torch.cat([zA, zB, zC], 1)                          # (batchsize, 3)
+        z = torch.cat([zA, zB, zC], 1)                                # (batchsize, 3)
         
-        p = torch.sigmoid(self.p(z))                            # output for xe (batchsize, 1)
+        p = torch.sigmoid(self.p(z))                                  # output for xe (batchsize, 1)
         return p
     
     def te(self, x1, x2):
@@ -66,21 +66,21 @@ class SNN(Module):
         y2 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x2))))      # (batchsize, 3)
         
         try:
-            y = torch.cat([y1, y2], 1)                          # (batchsize, 6)
+            y = torch.cat([y1, y2], 1)                               # (batchsize, 6)
         except IndexError:
             y1 = y1.view(1, len(y1))
             y2 = y2.view(1, len(y2))
             y = torch.cat([y1, y2], 1)
             
-        yA = torch.cat([y[:, 0], y[:, 3]], 1)                   # (batchsize, 2) each
-        yB = torch.cat([y[:, 1], y[:, 4]], 1)
-        yC = torch.cat([y[:, 2], y[:, 5]], 1)
+        yA = torch.cat([y[:, 0].view(len(y), 1), y[:, 3].view(len(y), 1)], 1)  # (batchsize, 2) each
+        yB = torch.cat([y[:, 1].view(len(y), 1), y[:, 4].view(len(y), 1)], 1)
+        yC = torch.cat([y[:, 2].view(len(y), 1), y[:, 5].view(len(y), 1)], 1)
         
-        zA = torch.abs(self.dA(yA))                             # (batchsize, 1)
+        zA = torch.abs(self.dA(yA))                                  # (batchsize, 1)
         zB = torch.abs(self.dB(yB))
         zC = torch.abs(self.dC(yC))
         
-        z = torch.cat([zA, zB, zC], 1)                          # (batchsize, 3)
+        z = torch.cat([zA, zB, zC], 1)                               # (batchsize, 3)
             
-        p = self.p(z)                                           # output for Te (batchsize, 1)
+        p = self.p(z)                                                # output for Te (batchsize, 1)
         return p

@@ -27,11 +27,11 @@ class MR():
         
         if tp == "xe":
             for i in train_dset:
-                self.trainbase += self.criterion(self.var, i[2]/100.0).item() / len(train_dset)
+                self.trainbase += self.criterion(self.var, i[2]).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.var, i[2]/100.0).item() / len(val_dset)
+                self.valbase += self.criterion(self.var, i[2]).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.var, i[2]/100.0).item() / len(test_dset)
+                self.testbase += self.criterion(self.var, i[2]).item() / len(test_dset)
         else:
             for i in train_dset:
                 self.trainbase += self.criterion(self.var, i[3].float()).item() / len(train_dset)
@@ -65,7 +65,7 @@ class MR():
                 self.opt.zero_grad()
                 
                 if self.tp == "xe":
-                    truth = xe/100.0
+                    truth = xe
                 else:
                     truth = Te.float()
 
@@ -88,7 +88,7 @@ class MR():
                 m2 = line[1]
                 
                 if self.tp == "xe":
-                    truth = line[2]/100.0
+                    truth = line[2]
                 else:
                     truth = line[3].float()
 
@@ -145,7 +145,7 @@ class MR():
             
         return trloss, trbase, vloss, vbase
 
-    def test_plot_stats(self):
+    def test(self):
         outputs = np.array([]).astype(float)
         invouts = np.array([]).astype(float)
         truths = np.array([]).astype(float)
@@ -159,7 +159,7 @@ class MR():
                 m2 = line[1]
                 
                 if self.tp == "xe":
-                    truth = line[2]/100.0
+                    truth = line[2]
                 else:
                     truth = line[3].float()
                 truths = np.append(truths, truth[np.newaxis].numpy().T)
