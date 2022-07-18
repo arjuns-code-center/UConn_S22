@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import SiameseNeuralNetwork as SNN
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_var, tp):        
+    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_stdev, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize, drop_last=True)
         self.train_dset = train_dset
         self.val_dset = val_dset
@@ -14,31 +14,31 @@ class MR():
         self.model = SNN.SNN(starting_features)
         self.max_epochs = epochs
 
-        # Set optimizer and loss function. Using MSE for regression. Have lr_scheduler for adaptive learning 
+        # Set optimizer and loss function. Using MAE for regression. Have lr_scheduler for adaptive learning 
         self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
         self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range')
-        self.criterion = torch.nn.MSELoss()
-
+        self.criterion = torch.nn.L1Loss()
+        
         # Set the baseline calculation parameter, and calculate the baselines
-        self.var = train_var
+        self.stdev = train_stdev
         self.trainbase = 0
         self.valbase = 0
         self.testbase = 0
         
         if tp == "xe":
             for i in train_dset:
-                self.trainbase += self.criterion(self.var, i[2]).item() / len(train_dset)
+                self.trainbase += self.criterion(self.stdev, i[2]).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.var, i[2]).item() / len(val_dset)
+                self.valbase += self.criterion(self.stdev, i[2]).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.var, i[2]).item() / len(test_dset)
+                self.testbase += self.criterion(self.stdev, i[2]).item() / len(test_dset)
         else:
             for i in train_dset:
-                self.trainbase += self.criterion(self.var, i[3].float()).item() / len(train_dset)
+                self.trainbase += self.criterion(self.stdev, i[3].float()).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.var, i[3].float()).item() / len(val_dset)
+                self.valbase += self.criterion(self.stdev, i[3].float()).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.var, i[3].float()).item() / len(test_dset)
+                self.testbase += self.criterion(self.stdev, i[3].float()).item() / len(test_dset)
 
         # Set the training parameter. Xe or Te
         self.tp = tp
@@ -91,6 +91,7 @@ class MR():
                     truth = line[2]
                 else:
                     truth = line[3].float()
+                truth = torch.unsqueeze(truth, 0)
 
                 output = self.model(m1.float(), m2.float(), self.tp)
                 val_running_loss += self.criterion(output[:, 0], truth).item()
@@ -131,13 +132,13 @@ class MR():
                 if tolerance == 5:
                     print("Early Stop. Loss difference over threshold.")
                     break
-            if val_running_loss <= 0.1:
-                print("Early Stop. Validation Loss under overfitting threshold.")
-                break
             if (val_running_loss - self.valbase) > 0.025:
                 print("Early Stop. Validation Loss over baseline threshold.")
                 break
-            
+            if val_running_loss <= 0.25:
+                print("Early Stop. Validation Loss under overfitting threshold.")
+                break
+
             trloss = np.append(trloss, train_running_loss)
             trbase = np.append(trbase, self.trainbase)
             vloss = np.append(vloss, val_running_loss)
@@ -162,6 +163,7 @@ class MR():
                     truth = line[2]
                 else:
                     truth = line[3].float()
+                
                 truths = np.append(truths, truth[np.newaxis].numpy().T)
 
                 output = self.model(m1.float(), m2.float(), self.tp) # f(A,B)

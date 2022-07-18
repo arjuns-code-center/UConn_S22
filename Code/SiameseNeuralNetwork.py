@@ -10,8 +10,8 @@ class SNN(Module):
         self.fc1 = Linear(in_features=start_features, out_features=4, bias=False)
         self.fc2 = Linear(in_features=4, out_features=3, bias=False)
         
-        torch.nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='leaky_relu')
-        torch.nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='leaky_relu')
+        torch.nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='relu', mode='fan_in')
+        torch.nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='relu', mode='fan_in')
         
         self.dA = Linear(in_features=2, out_features=1, bias=False)
         self.dB = Linear(in_features=2, out_features=1, bias=False)
@@ -32,11 +32,11 @@ class SNN(Module):
             return self.te(x1, x2)
         
     def xe(self, x1, x2):
-        y1 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x1))))      # (batchsize, 3)
-        y2 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x2))))      # (batchsize, 3)
+        y1 = F.relu(self.fc2(F.relu(self.fc1(x1))))      # (batchsize, 3)
+        y2 = F.relu(self.fc2(F.relu(self.fc1(x2))))      # (batchsize, 3)
         
         try:
-            y = torch.cat([y1, y2], 1)                               # (batchsize, 6)
+            y = torch.cat([y1, y2], 1)                           # (batchsize, 6)
         except IndexError:
             y1 = y1.view(1, len(y1))
             y2 = y2.view(1, len(y2))
@@ -76,11 +76,17 @@ class SNN(Module):
         yB = torch.cat([y[:, 1].view(len(y), 1), y[:, 4].view(len(y), 1)], 1)
         yC = torch.cat([y[:, 2].view(len(y), 1), y[:, 5].view(len(y), 1)], 1)
         
+        # weighted difference
+        with torch.no_grad():
+            self.dA.weight[:, 1] = -1 * self.dA.weight[:, 0]
+            self.dB.weight[:, 1] = -1 * self.dB.weight[:, 0]
+            self.dC.weight[:, 1] = -1 * self.dC.weight[:, 0]
+        
         zA = torch.abs(self.dA(yA))                                  # (batchsize, 1)
         zB = torch.abs(self.dB(yB))
         zC = torch.abs(self.dC(yC))
         
         z = torch.cat([zA, zB, zC], 1)                               # (batchsize, 3)
             
-        p = self.p(z)                                                # output for Te (batchsize, 1)
+        p = torch.sigmoid(self.p(z))                                 # output for Te (batchsize, 1)
         return p
