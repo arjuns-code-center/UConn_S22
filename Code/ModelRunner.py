@@ -14,9 +14,9 @@ class MR():
         self.model = SNN.SNN(starting_features)
         self.max_epochs = epochs
 
-        # Set optimizer and loss function. Using MAE for regression. Have lr_scheduler for adaptive learning 
+        # Set optimizer and loss function. Using MAE for regression. Adam will automatically update learning rates as it learns
         self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode='exp_range')
+        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr = lr_base, max_lr=lr_max, mode="triangular")
         self.criterion = torch.nn.L1Loss()
         
         # Set the baseline calculation parameter, and calculate the baselines
@@ -61,7 +61,7 @@ class MR():
             val_running_loss = 0.0
             
             # training step: iterate through the batch and obtain the 4 data
-            for x, (m1, m2, xe, Te) in enumerate(self.train_ec_dl):   
+            for x, (m1, m2, xe, Te) in enumerate(self.train_ec_dl):     
                 self.opt.zero_grad()
                 
                 if self.tp == "xe":
@@ -73,15 +73,15 @@ class MR():
                 output = self.model(m1.float(), m2.float(), self.tp)
 
                 loss = self.criterion(output[:, 0], truth)
-
+                
                 loss.backward()
                 self.opt.step()
+                self.sch.step()
 
                 train_running_loss += loss.item()
-                
+
             train_running_loss = train_running_loss / x
-            self.sch.step()                                    # update the learning rate
-            
+
             self.model.eval()
             for line in self.val_dset:
                 m1 = line[0]
@@ -115,28 +115,26 @@ class MR():
                 
                 patience = 0
             else:
-                if patience <= 3:
-                    print("Callback to epoch {} | Patience {}/4".format(lowest_loss_epoch, patience+1))
-                    
-                    checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
-                    self.model.load_state_dict(checkpoint['model_state_dict'])
-                    self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
-                    
+                checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                self.model.load_state_dict(checkpoint['model_state_dict'])
+                self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
+                
+                if patience < 5:
+                    print("Callback to epoch {} | Patience {}/5".format(lowest_loss_epoch, patience+1))
                     patience = patience + 1
+                else: # Early stop if after n callbacks the loss has still not gone down
+                    print("Early Stop. Callback exceeded patience limit.")
+                    break
                 
             # Early stopping. If the loss difference is over some min delta tolerance times, stop as it is not getting better
-            # Also stop is validation running loss is getting too small and breaks a threshold set
-            # Also if the validation loss is over the baseline by a lot, model won't learn anything as we are stuck in a local minima
-            if (val_running_loss - train_running_loss) > 0.01:
+            # Also if the validation loss is over the baseline by a lot, model won't learn anything as it is stuck in a local minima
+            if (val_running_loss - train_running_loss) > 0.01 or (val_running_loss - self.valbase) > 0.035:
                 tolerance = tolerance + 1
                 if tolerance == 5:
-                    print("Early Stop. Loss difference over threshold.")
+                    print("Early Stop. Validation loss stopped decreasing.")
                     break
-            if (val_running_loss - self.valbase) > 0.025:
-                print("Early Stop. Validation Loss over baseline threshold.")
-                break
-            if val_running_loss <= 0.25:
-                print("Early Stop. Validation Loss under overfitting threshold.")
+            if val_running_loss < 0.25:
+                print("Early Stop. Validation loss under overfitting threshold.")
                 break
 
             trloss = np.append(trloss, train_running_loss)
@@ -165,6 +163,7 @@ class MR():
                     truth = line[3].float()
                 
                 truths = np.append(truths, truth[np.newaxis].numpy().T)
+                truth = torch.unsqueeze(truth, 0)
 
                 output = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
                 invout = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
@@ -172,7 +171,7 @@ class MR():
                 outputs = np.append(outputs, output.detach().numpy())
                 invouts = np.append(invouts, invout.detach().numpy())
 
-                test_loss += self.criterion(output, truth).item() / len(self.test_dset)
+                test_loss += self.criterion(output[:, 0], truth).item() / len(self.test_dset)
 
         print('Test Loss: {} | Test Baseline: {}\n'.format(
             np.round(test_loss, 3), 
