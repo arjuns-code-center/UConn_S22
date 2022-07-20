@@ -14,7 +14,7 @@ class MR():
         self.model = SNN.SNN(starting_features)
         self.max_epochs = epochs
 
-        # Set optimizer and loss function. Using MAE for regression. Adam will automatically update learning rates as it learns
+        # Set optimizer and loss function. Using MAE for regression. CyclicLR scheduler.
         self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
         self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr = lr_base, max_lr=lr_max, mode="triangular")
         self.criterion = torch.nn.L1Loss()
