@@ -15,8 +15,8 @@ class MR():
         self.max_epochs = epochs
 
         # Set optimizer and loss function. Using MAE for regression. CyclicLR scheduler.
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr = lr_base, max_lr=lr_max, mode="triangular")
+        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr_base)
+        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode="triangular", cycle_momentum=False)
         self.criterion = torch.nn.L1Loss()
         
         # Set the baseline calculation parameter, and calculate the baselines
@@ -43,17 +43,19 @@ class MR():
         # Set the training parameter. Xe or Te
         self.tp = tp
 
-    def train_and_validate(self):
+    def train_and_validate(self, dB=1, oB=0):
         tolerance = 0                                # for early stopping
         patience = 0                                 # for callbacks
         
-        trloss = np.array([])
-        trbase = np.array([])
-        vloss = np.array([])
-        vbase = np.array([])
+        trloss = np.zeros((self.max_epochs+1))
+        trbase = np.zeros((self.max_epochs+1))
+        vloss = np.zeros((self.max_epochs+1))
+        vbase = np.zeros((self.max_epochs+1))
         
         lowest_loss = 100
-        lowest_loss_epoch = 1
+        good_loss = 100
+        lowest_loss_epoch = 0
+        good_rate_epoch = 0
         
         for epoch in range(self.max_epochs):
             self.model.train()
@@ -73,12 +75,11 @@ class MR():
                 output = self.model(m1.float(), m2.float(), self.tp)
 
                 loss = self.criterion(output[:, 0], truth)
+                train_running_loss += loss.item()
                 
                 loss.backward()
                 self.opt.step()
                 self.sch.step()
-
-                train_running_loss += loss.item()
 
             train_running_loss = train_running_loss / x
 
@@ -104,44 +105,58 @@ class MR():
                 np.round(val_running_loss, 6), 
                 np.round(self.valbase, 6)))
             
-            # Callback. If the loss goes up, revert the parameters back to previous epoch. Added patience to stop infinite computation. 
-            if val_running_loss <= lowest_loss:
-                lowest_loss = val_running_loss
-                lowest_loss_epoch = epoch+1
-                
-                torch.save({
-                    'model_state_dict': self.model.state_dict(),
-                    'optimizer_state_dict': self.opt.state_dict()}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
-                
-                patience = 0
-            else:
-                checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
-                self.model.load_state_dict(checkpoint['model_state_dict'])
-                self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
-                
-                if patience < 5:
-                    print("Callback to epoch {} | Patience {}/5".format(lowest_loss_epoch, patience+1))
-                    patience = patience + 1
-                else: # Early stop if after n callbacks the loss has still not gone down
-                    print("Early Stop. Callback exceeded patience limit.")
-                    break
-                
-            # Early stopping. If the loss difference is over some min delta tolerance times, stop as it is not getting better
-            # Also if the validation loss is over the baseline by a lot, model won't learn anything as it is stuck in a local minima
-            if (val_running_loss - train_running_loss) > 0.01 or (val_running_loss - self.valbase) > 0.035:
-                tolerance = tolerance + 1
-                if tolerance == 5:
-                    print("Early Stop. Validation loss stopped decreasing.")
-                    break
-            if val_running_loss < 0.25:
-                print("Early Stop. Validation loss under overfitting threshold.")
-                break
-
-            trloss = np.append(trloss, train_running_loss)
-            trbase = np.append(trbase, self.trainbase)
-            vloss = np.append(vloss, val_running_loss)
-            vbase = np.append(vbase, self.valbase)
+            trloss[epoch] = train_running_loss
+            trbase[epoch] = self.trainbase
+            vloss[epoch] = val_running_loss
+            vbase[epoch] = self.valbase
             
+            # Callback and Early Stopping. 
+            # Have 2 criteria to maintain: 1. val loss has to decrease. 2. rate of val loss w.r.t epochs (dvde) should not be too high.
+            # Update model and optimizer anyways. But since scheduler controls lr which affects derivative, update iff derivative too high. 
+            if val_running_loss > oB and epoch != 0: # as long as we are over overfit threshold
+                dvde = vloss[good_rate_epoch] - vloss[epoch]
+                
+                if val_running_loss <= lowest_loss and dvde < dB: # if loss and rate of loss are ok, then save good model
+                    lowest_loss = val_running_loss
+                    lowest_loss_epoch = epoch
+                    good_loss = val_running_loss
+                    good_rate_epoch = epoch
+
+                    torch.save({
+                        'model_state_dict': self.model.state_dict(),
+                        'optimizer_state_dict': self.opt.state_dict(), 
+                        'scheduler_state_dict': self.sch.state_dict()}, "D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+
+                    patience = 0
+                    tolerance = 0
+                else: # if not ok, find out which one is not ok, and revert model. 
+                    checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
+                    
+                    # NOTE: lowest_loss_epoch being good could mean good_rate_epoch is bad and vice versa. 
+                    if val_running_loss > lowest_loss:
+                        if patience < 5:
+                            print("Callback to epoch {} | Patience {}/5".format(lowest_loss_epoch+1, patience+1))
+                            patience = patience + 1
+                        else: # Early stop if after n callbacks the loss has still not gone down
+                            print("Early Stop. Validation loss stopped decreasing.")
+                            break
+                    elif dvde > dB:
+                        if tolerance < 5:
+                            print("Callback to epoch {} | Tolerance {}/5".format(good_rate_epoch+1, tolerance+1))
+                            tolerance = tolerance + 1
+                            self.sch.load_state_dict(checkpoint['scheduler_state_dict'])
+
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    self.opt.load_state_dict(checkpoint['optimizer_state_dict'])
+            elif val_running_loss < oB:
+                print("Early Stop. Validation loss under overfitting threshold.")                
+                break
+            
+        trloss = np.trim_zeros(trloss, 'b')
+        trbase = np.trim_zeros(trbase, 'b')
+        vloss = np.trim_zeros(vloss, 'b')
+        vbase = np.trim_zeros(vbase, 'b')
+                
         return trloss, trbase, vloss, vbase
 
     def test(self):
