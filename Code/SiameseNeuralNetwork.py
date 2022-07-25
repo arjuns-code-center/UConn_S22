@@ -2,7 +2,7 @@ import torch
 from torch.nn import Module, Linear
 import torch.nn.functional as F
 
-# SNN class with model
+# Siamese NN class model
 class SNN(Module):
     def __init__(self, start_features): 
         super(SNN, self).__init__()
@@ -34,13 +34,7 @@ class SNN(Module):
     def xe(self, x1, x2):
         y1 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x1))))      # (batchsize, 3)
         y2 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x2))))      # (batchsize, 3)
-        
-        try:
-            y = torch.cat([y1, y2], 1)                           # (batchsize, 6)
-        except IndexError:
-            y1 = y1.view(1, len(y1))
-            y2 = y2.view(1, len(y2))
-            y = torch.cat([y1, y2], 1)
+        y = torch.cat([y1, y2], 1)
         
         yA = torch.cat([y[:, 0].view(len(y), 1), y[:, 3].view(len(y), 1)], 1)  # (batchsize, 2) each
         yB = torch.cat([y[:, 1].view(len(y), 1), y[:, 4].view(len(y), 1)], 1)
@@ -52,9 +46,9 @@ class SNN(Module):
             self.dB.weight[:, 1] = -1 * self.dB.weight[:, 0]
             self.dC.weight[:, 1] = -1 * self.dC.weight[:, 0]
         
-        zA = self.dA(yA)                                              # (batchsize, 1)
-        zB = self.dB(yB)
-        zC = self.dC(yC)
+        zA = torch.tanh(self.dA(yA))                                              # (batchsize, 1)
+        zB = torch.tanh(self.dB(yB))
+        zC = torch.tanh(self.dC(yC))
         
         z = torch.cat([zA, zB, zC], 1)                                # (batchsize, 3)
         
@@ -64,13 +58,7 @@ class SNN(Module):
     def te(self, x1, x2):
         y1 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x1))))      # (batchsize, 3)
         y2 = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x2))))      # (batchsize, 3)
-        
-        try:
-            y = torch.cat([y1, y2], 1)                               # (batchsize, 6)
-        except IndexError:
-            y1 = y1.view(1, len(y1))
-            y2 = y2.view(1, len(y2))
-            y = torch.cat([y1, y2], 1)
+        y = torch.cat([y1, y2], 1)
             
         yA = torch.cat([y[:, 0].view(len(y), 1), y[:, 3].view(len(y), 1)], 1)  # (batchsize, 2) each
         yB = torch.cat([y[:, 1].view(len(y), 1), y[:, 4].view(len(y), 1)], 1)
