@@ -46,13 +46,13 @@ class SNN(Module):
             self.dB.weight[:, 1] = -1 * self.dB.weight[:, 0]
             self.dC.weight[:, 1] = -1 * self.dC.weight[:, 0]
         
-        zA = torch.tanh(self.dA(yA))                                              # (batchsize, 1)
-        zB = torch.tanh(self.dB(yB))
-        zC = torch.tanh(self.dC(yC))
+        zA = self.dA(yA)                                              # (batchsize, 1)
+        zB = self.dB(yB)
+        zC = self.dC(yC)
         
         z = torch.cat([zA, zB, zC], 1)                                # (batchsize, 3)
         
-        p = torch.sigmoid(self.p(z))                                  # output for xe (batchsize, 1)
+        p = torch.sigmoid(self.p(torch.tanh(z)))                      # output for xe (batchsize, 1)
         return p
     
     def te(self, x1, x2):

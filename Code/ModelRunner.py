@@ -20,8 +20,8 @@ class MR():
         self.max_epochs = epochs
 
         # Set optimizer and loss function. Using MAE for regression. CyclicLR scheduler.
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr_base)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode="triangular", cycle_momentum=False)
+        self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
+        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode="exp_range")
         self.criterion = torch.nn.L1Loss()
         
         # Set the baseline calculation parameter, and calculate the baselines
@@ -112,7 +112,7 @@ class MR():
             # Callback and Early Stopping. 
             # Have criteria to maintain: val loss has to decrease. If constant or increasing, stop. 
             if val_running_loss > oB: # as long as we are over overfit threshold
-                if val_running_loss < lowest_loss: # if loss and rate of loss are ok, then save good model
+                if val_running_loss <= lowest_loss: # if loss and rate of loss are ok, then save good model
                     lowest_loss = val_running_loss
                     lowest_loss_epoch = epoch
 
@@ -126,8 +126,8 @@ class MR():
                     checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
                     
                     # NOTE: lowest_loss_epoch being good could mean good_rate_epoch is bad and vice versa. 
-                    if patience < 5:
-                        print("Callback to epoch {} | Patience {}/5".format(lowest_loss_epoch+1, patience+1))
+                    if patience < 10:
+                        print("Callback to epoch {} | Patience {}/10".format(lowest_loss_epoch+1, patience+1))
                         patience = patience + 1
                     else: # Early stop if after n callbacks the loss has still not gone down
                         print("Early Stop. Validation loss stopped decreasing.")
