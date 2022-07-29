@@ -3,12 +3,13 @@ import torch
 from torch.utils.data import DataLoader
 import SiameseNeuralNetwork as SNN
 import SimpleNeuralNetwork as SimpNN
+from sklearn.metrics import r2_score
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_stdev, tp):        
+    def __init__(self, starting_features, batchsize, epochs, lr_base, train_dset, val_dset, test_dset, train_stdev, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize, drop_last=True)
-        self.val_ec_dl = DataLoader(val_dset, shuffle=False, batch_size=len(val_dset))
-        self.test_ec_dl = DataLoader(test_dset, shuffle=False, batch_size=len(test_dset))
+        self.val_dset = val_dset
+        self.test_dset = test_dset
         
         self.trainlen = len(train_dset)
         self.vallen = len(val_dset)
@@ -19,9 +20,8 @@ class MR():
         self.simpmodel = SimpNN.SimpNN(2*starting_features)
         self.max_epochs = epochs
 
-        # Set optimizer and loss function. Using MAE for regression. CyclicLR scheduler.
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=lr_base)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=lr_base, max_lr=lr_max, mode="exp_range")
+        # Set optimizer and loss function. Using MAE for regression.
+        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr_base)
         self.criterion = torch.nn.L1Loss()
         
         # Set the baseline calculation parameter, and calculate the baselines
@@ -82,21 +82,26 @@ class MR():
                 
                 loss.backward()
                 self.opt.step()
-                self.sch.step()
 
             train_running_loss = train_running_loss / x
 
             self.model.eval()
-            for v, (m1, m2, xe, Te) in enumerate(self.val_ec_dl):
-                if self.tp == "xe":
-                    truth = xe
-                else:
-                    truth = Te.float()
+            for i in range(self.vallen):
+                line = self.val_dset[i]
 
-                output = self.model(m1.float(), m2.float(), self.tp)
-                val_running_loss += self.criterion(output[:, 0], truth).item()
+                m1 = line[0].view(1, 5)
+                m2 = line[1].view(1, 5)
+
+                if self.tp == "xe":
+                    truth = line[2].view(1, 1)
+                else:
+                    truth = line[3].float().view(1, 1)
+
+                output = self.model(m1.float(), m2.float(), self.tp)                
+                val_running_loss += self.criterion(output, truth).item()
+                
+            val_running_loss = val_running_loss / self.vallen
             
-            # val_running_loss = val_running_loss / self.vallen
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
                 np.round(train_running_loss, 6), 
@@ -126,8 +131,8 @@ class MR():
                     checkpoint = torch.load("D:\\Research\\UConn_ML\\Code\\Checkpoints\\checkpoint.pth")
                     
                     # NOTE: lowest_loss_epoch being good could mean good_rate_epoch is bad and vice versa. 
-                    if patience < 10:
-                        print("Callback to epoch {} | Patience {}/10".format(lowest_loss_epoch+1, patience+1))
+                    if patience < 5:
+                        print("Callback to epoch {} | Patience {}/5".format(lowest_loss_epoch+1, patience+1))
                         patience = patience + 1
                     else: # Early stop if after n callbacks the loss has still not gone down
                         print("Early Stop. Validation loss stopped decreasing.")
@@ -154,29 +159,35 @@ class MR():
         
         test_loss = 0.0
         self.model.eval()
-
-        with torch.no_grad():
-            for t, (m1, m2, xe, Te) in enumerate(self.test_ec_dl):
-                if self.tp == "xe":
-                    truth = xe
-                else:
-                    truth = Te.float()
-                
-                truths = np.append(truths, truth[np.newaxis].numpy().T)
-
-                output = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
-                invout = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
-                
-                outputs = np.append(outputs, output.detach().numpy())
-                invouts = np.append(invouts, invout.detach().numpy())
-
-                test_loss += self.criterion(output[:, 0], truth).item()
         
-        # test_loss = test_loss / self.testlen
+        for i in range(self.testlen):
+            line = self.test_dset[i]
+            
+            m1 = line[0].view(1, 5)
+            m2 = line[1].view(1, 5)
+                
+            if self.tp == "xe":
+                truth = line[2]
+            else:
+                truth = line[3].float()
+            
+            truths = np.append(truths, truth[np.newaxis].numpy().T)
+
+            output = self.model(m1.float(), m2.float(), self.tp) # f(A,B)
+            invout = self.model(m2.float(), m1.float(), self.tp) # f(B,A)
+                
+            outputs = np.append(outputs, output.detach().numpy())
+            invouts = np.append(invouts, invout.detach().numpy())
+
+            test_loss += self.criterion(output, truth).item()
         
-        print('Test Loss: {} | Test Baseline: {}\n'.format(
+        test_loss = test_loss / self.testlen
+        test_r2 = r2_score(truths, outputs)
+        
+        print('Test Loss: {} | Test Baseline: {} | R^2: {}\n'.format(
             np.round(test_loss, 3), 
-            np.round(self.testbase, 3)))
+            np.round(self.testbase, 3),
+            np.round(test_r2, 3)))
 
         return outputs, invouts, truths
     
@@ -214,21 +225,25 @@ class MR():
                 
                 loss.backward()
                 self.opt.step()
-                self.sch.step()
 
             train_running_loss = train_running_loss / x
 
             self.simpmodel.eval()
-            for v, (m1, m2, xe, Te) in enumerate(self.val_ec_dl):
+            for i in range(self.vallen):
+                line = self.val_dset[i]
+
+                m1 = line[0].view(1, 5)
+                m2 = line[1].view(1, 5)
+                
                 if self.tp == "xe":
-                    truth = xe
+                    truth = line[2]
                 else:
-                    truth = Te.float()
+                    truth = line[3].float()
 
                 output = self.simpmodel(m1.float(), m2.float(), self.tp)
-                val_running_loss += self.criterion(output[:, 0], truth).item()
-            
-            # val_running_loss = val_running_loss / self.vallen
+                val_running_loss += self.criterion(output, truth).item()
+                
+            val_running_loss = val_running_loss / self.vallen
             
             print('Epoch {} | Train Loss: {} | Train Baseline: {} | Val Loss: {} | Val Baseline: {}'.format(
                 epoch+1, 
@@ -288,27 +303,33 @@ class MR():
         test_loss = 0.0
         self.simpmodel.eval()
 
-        with torch.no_grad():
-            for t, (m1, m2, xe, Te) in enumerate(self.test_ec_dl):
-                if self.tp == "xe":
-                    truth = xe
-                else:
-                    truth = Te.float()
+        for i in range(self.testlen):
+            line = self.test_dset[i]
+            
+            m1 = line[0].view(1, 5)
+            m2 = line[1].view(1, 5)
                 
-                truths = np.append(truths, truth[np.newaxis].numpy().T)
-
-                output = self.simpmodel(m1.float(), m2.float(), self.tp) # f(A,B)
-                invout = self.simpmodel(m2.float(), m1.float(), self.tp) # f(B,A)
+            if self.tp == "xe":
+                truth = line[2]
+            else:
+                truth = line[3].float()
                 
-                outputs = np.append(outputs, output.detach().numpy())
-                invouts = np.append(invouts, invout.detach().numpy())
+            truths = np.append(truths, truth[np.newaxis].numpy().T)
+            
+            output = self.simpmodel(m1.float(), m2.float(), self.tp) # f(A,B)
+            invout = self.simpmodel(m2.float(), m1.float(), self.tp) # f(B,A)
+                
+            outputs = np.append(outputs, output.detach().numpy())
+            invouts = np.append(invouts, invout.detach().numpy())
 
-                test_loss += self.criterion(output[:, 0], truth).item()
+            test_loss += self.criterion(output, truth).item()
         
-        # test_loss = test_loss / self.testlen
-
-        print('Test Loss: {} | Test Baseline: {}\n'.format(
+        test_loss = test_loss / self.testlen
+        test_r2 = r2_score(truths, outputs)
+        
+        print('Test Loss: {} | Test Baseline: {} | R^2: {}\n'.format(
             np.round(test_loss, 3), 
-            np.round(self.testbase, 3)))
+            np.round(self.testbase, 3),
+            np.round(test_r2, 3)))
 
         return outputs, invouts, truths
