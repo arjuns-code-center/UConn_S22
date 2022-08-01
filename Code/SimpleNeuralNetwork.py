@@ -26,7 +26,7 @@ class SimpNN(Module):
     def xe(self, x1, x2):
         x = torch.cat([x1, x2], 1)
         y = F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x))))      # (batchsize, 5)
-        p = torch.sigmoid(self.p(torch.tanh(y)))                   # (batchsize, 1)
+        p = torch.sigmoid(self.p(y))                               # (batchsize, 1)
         return p
     
     def te(self, x1, x2):
