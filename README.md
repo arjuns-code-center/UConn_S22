@@ -46,7 +46,7 @@ The Simple Model:
 Above in an image of the Simple Neural Network architecture. Both pairs of 5 molecule features are concatenated into a set of 10, shown in GREEN. Then, this is passed into Dense layers shown in RED, which is passed into the final neuron in GRAY, where output is provided. 
 
 # Results: 
-![image](https://user-images.githubusercontent.com/41523488/182659614-190bc92c-8b84-4b24-a449-da42b26df389.png)
+![image](https://user-images.githubusercontent.com/41523488/182665722-4a99d2d0-2530-4723-b3fc-4a55b8d00c0b.png)
 
 Above is a side by side plot of Siamese and Simple, shown on the LEFT and RIGHT respectively. Each model has a residual and output plot. The residual plot has the residuals shown in RED, the 100% accuracy line shown in GREEN, with a tolerance lines shown in YELLOW. The output plots have the actual vs predicted points shown in GREEN, with the 100% accuracy line shown in BLUE. As we see, the Siamese network did a better job than the simple network. Although there is some error in the plots, the overall trend matches a somewhat 1-1 slope. 
 
