@@ -6,7 +6,7 @@ import SimpleNeuralNetwork as SimpNN
 from sklearn.metrics import r2_score
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, train_dset, val_dset, test_dset, train_stdev, tp):        
+    def __init__(self, starting_features, batchsize, epochs, lr_base, train_dset, val_dset, test_dset, train_median, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize, drop_last=True)
         self.val_dset = val_dset
         self.test_dset = test_dset
@@ -22,25 +22,25 @@ class MR():
         self.lr = lr_base
         
         # Set the baseline calculation parameter, and calculate the baselines
-        self.stdev = train_stdev
+        self.median = train_median
         self.trainbase = 0
         self.valbase = 0
         self.testbase = 0
         
         if tp == "xe":
             for i in train_dset:
-                self.trainbase += self.criterion(self.stdev, i[2]).item() / len(train_dset)
+                self.trainbase += self.criterion(self.median, i[2]).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.stdev, i[2]).item() / len(val_dset)
+                self.valbase += self.criterion(self.median, i[2]).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.stdev, i[2]).item() / len(test_dset)
+                self.testbase += self.criterion(self.median, i[2]).item() / len(test_dset)
         else:
             for i in train_dset:
-                self.trainbase += self.criterion(self.stdev, i[3].float()).item() / len(train_dset)
+                self.trainbase += self.criterion(self.median, i[3].float()).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.stdev, i[3].float()).item() / len(val_dset)
+                self.valbase += self.criterion(self.median, i[3].float()).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.stdev, i[3].float()).item() / len(test_dset)
+                self.testbase += self.criterion(self.median, i[3].float()).item() / len(test_dset)
 
         # Set the training parameter. Xe or Te
         self.tp = tp
