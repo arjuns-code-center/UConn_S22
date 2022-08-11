@@ -94,8 +94,8 @@ class MR():
             for i in range(self.vallen):
                 line = self.val_dset[i]
 
-                m1 = line[0].view(1, 5)
-                m2 = line[1].view(1, 5)
+                m1 = line[0].view(1, self.starting_features)
+                m2 = line[1].view(1, self.starting_features)
 
                 if self.tp == "xe":
                     truth = line[2].view(1, 1)
@@ -168,8 +168,8 @@ class MR():
         for i in range(self.testlen):
             line = self.test_dset[i]
             
-            m1 = line[0].view(1, 5)
-            m2 = line[1].view(1, 5)
+            m1 = line[0].view(1, self.starting_features)
+            m2 = line[1].view(1, self.starting_features)
                 
             if self.tp == "xe":
                 truth = line[2]
