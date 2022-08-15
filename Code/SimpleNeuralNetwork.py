@@ -36,5 +36,5 @@ class SimpNN(Module):
     def te(self, x1, x2):
         x = torch.cat([x1, x2], 1)            
         y = F.relu(self.fc4(F.relu(self.fc3(F.relu(self.fc2(F.relu(self.fc1(x))))))))      # (batchsize, 5)
-        p = torch.sigmoid(self.p(y))                               # (batchsize, 1)
+        p = self.p(y)                               # (batchsize, 1)
         return p

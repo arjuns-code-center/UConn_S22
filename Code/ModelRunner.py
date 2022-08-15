@@ -6,7 +6,7 @@ import SimpleNeuralNetwork as SimpNN
 from sklearn.metrics import r2_score
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, train_dset, val_dset, test_dset, train_median, tp):        
+    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_median, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize, drop_last=True)
         self.val_dset = val_dset
         self.test_dset = test_dset
@@ -19,7 +19,8 @@ class MR():
         self.criterion = torch.nn.L1Loss()
         self.starting_features = starting_features
         self.model = None
-        self.lr = lr_base
+        self.lrbase = lr_base
+        self.lrmax = lr_max
         
         # Set the baseline calculation parameter, and calculate the baselines
         self.median = train_median
@@ -52,7 +53,8 @@ class MR():
         elif modeltype == 'simp':
             self.model = SimpNN.SimpNN(2*self.starting_features)
         
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        self.opt = torch.optim.SGD(self.model.parameters(), lr=self.lrbase)
+        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=self.lrbase, max_lr=self.lrmax)
             
         patience = 0                                 # for callbacks
         tolerance = 0
@@ -87,6 +89,7 @@ class MR():
                 
                 loss.backward()
                 self.opt.step()
+                self.sch.step()
 
             train_running_loss = train_running_loss / x
 
@@ -184,7 +187,7 @@ class MR():
             outputs = np.append(outputs, output.detach().numpy())
             invouts = np.append(invouts, invout.detach().numpy())
 
-            test_loss += self.criterion(output, truth).item()
+            test_loss += self.criterion(output, truth.view(1, 1)).item()
         
         test_loss = test_loss / self.testlen
         test_r2 = r2_score(truths, outputs)
