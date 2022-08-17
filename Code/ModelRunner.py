@@ -6,7 +6,7 @@ import SimpleNeuralNetwork as SimpNN
 from sklearn.metrics import r2_score
 
 class MR():
-    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_median, tp):        
+    def __init__(self, starting_features, batchsize, epochs, lr_base, lr_max, train_dset, val_dset, test_dset, train_constant, tp):        
         self.train_ec_dl = DataLoader(train_dset, shuffle=True, batch_size=batchsize, drop_last=True)
         self.val_dset = val_dset
         self.test_dset = test_dset
@@ -16,32 +16,32 @@ class MR():
         self.testlen = len(test_dset)
         
         self.max_epochs = epochs
-        self.criterion = torch.nn.L1Loss()
+        self.criterion = torch.nn.MSELoss()
         self.starting_features = starting_features
         self.model = None
         self.lrbase = lr_base
         self.lrmax = lr_max
         
         # Set the baseline calculation parameter, and calculate the baselines
-        self.median = train_median
+        self.constant = train_constant
         self.trainbase = 0
         self.valbase = 0
         self.testbase = 0
         
         if tp == "xe":
             for i in train_dset:
-                self.trainbase += self.criterion(self.median, i[2]).item() / len(train_dset)
+                self.trainbase += self.criterion(self.constant, i[2]).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.median, i[2]).item() / len(val_dset)
+                self.valbase += self.criterion(self.constant, i[2]).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.median, i[2]).item() / len(test_dset)
+                self.testbase += self.criterion(self.constant, i[2]).item() / len(test_dset)
         else:
             for i in train_dset:
-                self.trainbase += self.criterion(self.median, i[3].float()).item() / len(train_dset)
+                self.trainbase += self.criterion(self.constant, i[3].float()).item() / len(train_dset)
             for i in val_dset:
-                self.valbase += self.criterion(self.median, i[3].float()).item() / len(val_dset)
+                self.valbase += self.criterion(self.constant, i[3].float()).item() / len(val_dset)
             for i in test_dset:
-                self.testbase += self.criterion(self.median, i[3].float()).item() / len(test_dset)
+                self.testbase += self.criterion(self.constant, i[3].float()).item() / len(test_dset)
 
         # Set the training parameter. Xe or Te
         self.tp = tp
@@ -64,7 +64,7 @@ class MR():
         vloss = np.array([])
         vbase = np.array([])
         
-        lowest_loss = 100
+        lowest_loss = 1e10
         lowest_loss_epoch = 0
      
         for epoch in range(self.max_epochs):
