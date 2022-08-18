@@ -60,13 +60,17 @@ Above in an image of the Simple Neural Network architecture. Both pairs of molec
 
 Above is a side by side plot of Siamese and Simple, shown on the LEFT and RIGHT respectively, for Xe. Each model has a residual and output plot. The residual plot has the residuals shown in RED, the 100% accuracy line shown in GREEN, with a tolerance lines shown in YELLOW. The output plots have the actual vs predicted points shown in GREEN, with the 100% accuracy line shown in BLUE. 
 
-Although this seems to be good, eliminating the bad outputs may be unrepresentative of the entire model performance, and may provide unnecessary bias. It was soon found that Xe had a lot of errors in it and the model was learning things it should not have been in the first place, so we decided to abandon Xe and train on Te, since there were less restrictions for Te than there were Xe. 
-
-![image](https://user-images.githubusercontent.com/41523488/185477155-e09215e7-1888-49d9-af78-9f29f44651c6.png)
+Although this seems to be good, eliminating the bad outputs may be unrepresentative of the entire model performance, and may provide unnecessary bias. It was soon found that Xe had a lot of errors in it and the model was learning things it should not have been in the first place, so we decided to abandon Xe and train on Te, since there were less restrictions for Te than there were Xe.
 
 Above is a side by side plot of Siamese and Simple, shown on the LEFT and RIGHT respectively, for Te. Each model has a residual and output plot. The residual plot has the residuals shown in RED, the 100% accuracy line shown in GREEN. The output plots have the actual vs predicted points shown in GREEN, with the 100% accuracy line shown in BLUE. 
 
-We can see that the Siamese NN did not beat the baseline, but the Simple NN did. This can be because the Siamese architecture has symmetry (when the inverse of molecule combination gives the same temperature) built into it already, and so does not need to learn that aspect, while the Simple architecture has to learn that and then learn everything else. Both plots predict around the IQR of Te, with little to no prediction past the third quartile. 
+The Siamese NN did not beat the baseline, but the Simple NN did. This can be because the Siamese architecture has 
+symmetry (when the inverse of molecule combination gives the same temperature) built into it already, and so does 
+not need to learn that aspect, while the Simple architecture has to learn that and then learn everything else. Both 
+plots predict around the IQR of Te, with little to no prediction past the third quartile. I have shown only the 
+range where most of the predictions were done for better visualization, and have split the test data into small 
+batches to see how well the overall performance was. Looking at the plots, it seems that there is something good 
+going on, although more work needs to be done to minimize the scattering. 
 
 # Discussion:
 Given the features and skewness in labels, the models did as best as they could. Xe was found to be untrainable after investigating into its discrepancies. The Te values were very widely spread with skewness to the right. The Siamese NN could not beat the baseline, which was very concerning, and the R^2 was negative, meaning it was not able to learn anything. The Simple NN did beat the baseline, however, and had a positive, small R^2. This means it was able to learn something, but due to its weak and simple architecture, was not able to give very conclusive plots. With such a large batchsize, both networks were not able to give proper, conclusive results. This may just be due to bad features or bad labels. Once they are fixed and validated, I believe the models will do much better. This work will need to be continued in the future...
