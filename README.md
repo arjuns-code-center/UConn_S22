@@ -62,6 +62,8 @@ Above is a side by side plot of Siamese and Simple, shown on the LEFT and RIGHT 
 
 Although this seems to be good, eliminating the bad outputs may be unrepresentative of the entire model performance, and may provide unnecessary bias. It was soon found that Xe had a lot of errors in it and the model was learning things it should not have been in the first place, so we decided to abandon Xe and train on Te, since there were less restrictions for Te than there were Xe.
 
+![image](https://user-images.githubusercontent.com/41523488/185484759-fe154e87-c54d-4445-8ab0-b5c3ee973088.png)
+
 Above is a side by side plot of Siamese and Simple, shown on the LEFT and RIGHT respectively, for Te. Each model has a residual and output plot. The residual plot has the residuals shown in RED, the 100% accuracy line shown in GREEN. The output plots have the actual vs predicted points shown in GREEN, with the 100% accuracy line shown in BLUE. 
 
 The Siamese NN did not beat the baseline, but the Simple NN did. This can be because the Siamese architecture has 
