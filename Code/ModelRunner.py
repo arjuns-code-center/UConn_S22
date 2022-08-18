@@ -16,7 +16,7 @@ class MR():
         self.testlen = len(test_dset)
         
         self.max_epochs = epochs
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.L1Loss()
         self.starting_features = starting_features
         self.model = None
         self.lrbase = lr_base
@@ -53,8 +53,8 @@ class MR():
         elif modeltype == 'simp':
             self.model = SimpNN.SimpNN(2*self.starting_features)
         
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=self.lrbase)
-        self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=self.lrbase, max_lr=self.lrmax)
+        self.opt = torch.optim.Adam(self.model.parameters(), lr=self.lrbase)
+        #self.sch = torch.optim.lr_scheduler.CyclicLR(self.opt, base_lr=self.lrbase, max_lr=self.lrmax)
             
         patience = 0                                 # for callbacks
         tolerance = 0
@@ -89,7 +89,7 @@ class MR():
                 
                 loss.backward()
                 self.opt.step()
-                self.sch.step()
+                #self.sch.step()
 
             train_running_loss = train_running_loss / x
 

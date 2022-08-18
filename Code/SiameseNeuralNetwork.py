@@ -7,15 +7,15 @@ class SNN(Module):
     def __init__(self, start_features): 
         super(SNN, self).__init__()
         
-        self.fc1 = Linear(in_features=start_features, out_features=10, bias=False)
-        self.fc2 = Linear(in_features=10, out_features=7, bias=False)
-        self.fc3 = Linear(in_features=7, out_features=5, bias=False)
-        self.fc4 = Linear(in_features=5, out_features=3, bias=False)
+        self.fc1 = Linear(in_features=start_features, out_features=20, bias=False)
+        self.fc2 = Linear(in_features=20, out_features=15, bias=False)
+        self.fc3 = Linear(in_features=15, out_features=10, bias=False)
+        self.fc4 = Linear(in_features=10, out_features=3, bias=False)
         
-        torch.nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='relu', mode='fan_in')
-        torch.nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='relu', mode='fan_in')
-        torch.nn.init.kaiming_normal_(self.fc3.weight, nonlinearity='relu', mode='fan_in')
-        torch.nn.init.kaiming_normal_(self.fc4.weight, nonlinearity='relu', mode='fan_in')
+        torch.nn.init.kaiming_normal_(self.fc1.weight, nonlinearity='leaky_relu', mode='fan_in')
+        torch.nn.init.kaiming_normal_(self.fc2.weight, nonlinearity='leaky_relu', mode='fan_in')
+        torch.nn.init.kaiming_normal_(self.fc3.weight, nonlinearity='leaky_relu', mode='fan_in')
+        torch.nn.init.kaiming_normal_(self.fc4.weight, nonlinearity='leaky_relu', mode='fan_in')
         
         self.dA = Linear(in_features=2, out_features=1, bias=False)
         self.dB = Linear(in_features=2, out_features=1, bias=False)
@@ -61,8 +61,8 @@ class SNN(Module):
         return p
     
     def te(self, x1, x2):
-        y1 = F.relu(self.fc4(F.relu(self.fc3(F.relu(self.fc2(F.relu(self.fc1(x1))))))))      # (batchsize, 3)
-        y2 = F.relu(self.fc4(F.relu(self.fc3(F.relu(self.fc2(F.relu(self.fc1(x2))))))))      # (batchsize, 3)
+        y1 = F.leaky_relu(self.fc4(F.leaky_relu(self.fc3(F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x1))))))))      # (batchsize, 3)
+        y2 = F.leaky_relu(self.fc4(F.leaky_relu(self.fc3(F.leaky_relu(self.fc2(F.leaky_relu(self.fc1(x2))))))))      # (batchsize, 3)
         y = torch.cat([y1, y2], 1)
             
         yA = torch.cat([y[:, 0].view(len(y), 1), y[:, 3].view(len(y), 1)], 1)  # (batchsize, 2) each
@@ -81,5 +81,5 @@ class SNN(Module):
         
         z = torch.cat([zA, zB, zC], 1)                               # (batchsize, 3)
             
-        p = self.p(z)                                 # output for Te (batchsize, 1)
+        p = self.p(z)                                  # output for Te (batchsize, 1)
         return p
